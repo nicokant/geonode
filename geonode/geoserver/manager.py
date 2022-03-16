@@ -357,7 +357,7 @@ class GeoServerResourceManager(ResourceManagerInterface):
                 )
                 transforms = session_opts.get('transforms', None)
                 if transforms:
-                   task.set_transforms(transforms)
+                    task.set_transforms(transforms)
                 #  Starting import process
                 import_session = import_session.reload()
                 import_session.commit()
