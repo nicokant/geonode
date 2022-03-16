@@ -24,6 +24,7 @@ from dynamic_rest.filters import DynamicFilterBackend, DynamicSortingFilter
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from rest_framework.authentication import SessionAuthentication, BasicAuthentication
+from rest_framework.exceptions import AuthenticationFailed, NotFound
 
 from oauth2_provider.contrib.rest_framework import OAuth2Authentication
 from rest_framework.response import Response
@@ -33,7 +34,8 @@ from geonode.base.api.permissions import IsOwnerOrReadOnly
 from geonode.base.api.pagination import GeoNodeApiPagination
 from geonode.layers.models import Dataset
 from geonode.maps.api.serializers import SimpleMapLayerSerializer, SimpleMapSerializer
-
+from geonode.layers.api.exceptions import LayerReplaceException
+from geonode.layers.views import dataset_replace
 from .serializers import DatasetSerializer, DatasetListSerializer
 from .permissions import DatasetPermissionsFilter
 
@@ -82,3 +84,31 @@ class DatasetViewSet(DynamicModelViewSet):
         dataset = self.get_object()
         resources = dataset.maps
         return Response(SimpleMapSerializer(many=True).to_representation(resources))
+
+    @extend_schema(
+        methods=["post"],
+        responses={200},
+        description="API endpoint allowing to replace a dataset."
+    )
+    @action(
+        detail=False,
+        url_path="(?P<dataset_id>\d+)/replace",  # noqa
+        url_name="replace-dataset",
+        methods=["post"]
+    )
+    def replace(self, request, dataset_id=None):
+        user = request.user
+        if not user or not user.is_authenticated:
+            raise AuthenticationFailed
+
+        if not self.queryset.filter(id=dataset_id).exists():
+            raise NotFound(detail=f"Layer with ID {dataset_id} is not available")
+
+        alternate = self.queryset.get(id=dataset_id).alternate
+
+        response = dataset_replace(request=request, layername=alternate)
+
+        if response.status_code != 200:
+            raise LayerReplaceException(detail=response.content)
+
+        return response

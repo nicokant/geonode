@@ -67,7 +67,6 @@ from geonode.base.enumerations import CHARSETS
 from geonode.decorators import check_keyword_write_perms
 from geonode.layers.forms import (
     DatasetForm,
-    LayerUploadForm,
     LayerAttributeForm,
     NewLayerUploadForm)
 from geonode.layers.models import (
@@ -912,23 +911,39 @@ def dataset_append_replace_view(request, layername, template, action_type):
         }
         return render(request, template, context=ctx)
     elif request.method == 'POST':
-        form = LayerUploadForm(request.POST, request.FILES)
+        from geonode.upload.forms import LayerUploadForm as UploadForm
+        form = UploadForm(request.POST, request.FILES, user=request.user)
         out = {}
+        _tmpdir = None
         if form.is_valid():
             try:
-                tempdir, base_file = form.write_files()
-                files, _tmpdir = get_files(base_file)
+                data_retriever = form.cleaned_data["data_retriever"]
+                base_file = data_retriever.get("base_file").get_path(allow_transfer=False)
+                files = {_file.split('.')[1]: _file for _file in data_retriever.file_paths.values()}
+
+                # in case of zip we need to extract them into a temporary folder
+                # this is needed because otherwise we cannot validate the consistency of the structure
+                if '.zip' in base_file:
+                    files, _tmpdir = get_files(base_file)
                 #  validate input source
                 resource_is_valid = validate_input_source(
                     layer=layer, filename=base_file, files=files, action_type=action_type
                 )
+                # in case of zip file, we can remove the temporary file.
+                if _tmpdir is not None:
+                    shutil.rmtree(_tmpdir, ignore_errors=True)
+
                 out = {}
                 if resource_is_valid:
                     getattr(resource_manager, action_type)(
                         layer,
                         vals={
                             'files': list(files.values()),
-                            'user': request.user})
+                            'user': request.user
+                        },
+                        xml_file=files.get('xml'),
+                        metadata_uploaded=True if files.get('xml') else False
+                    )
                     out['success'] = True
                     out['url'] = layer.get_absolute_url()
                     #  invalidating resource chache
@@ -937,11 +952,6 @@ def dataset_append_replace_view(request, layername, template, action_type):
                 logger.exception(e)
                 out['success'] = False
                 out['errors'] = str(e)
-            finally:
-                if tempdir is not None:
-                    shutil.rmtree(tempdir, ignore_errors=True)
-                if _tmpdir is not None:
-                    shutil.rmtree(_tmpdir, ignore_errors=True)
         else:
             errormsgs = []
             for e in form.errors.values():
@@ -954,6 +964,9 @@ def dataset_append_replace_view(request, layername, template, action_type):
             register_event(request, 'change', layer)
         else:
             status_code = 400
+
+        if _tmpdir is not None:
+            shutil.rmtree(_tmpdir, ignore_errors=True)
 
         return HttpResponse(
             json.dumps(out),

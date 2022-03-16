@@ -501,17 +501,17 @@ class ResourceManager(ResourceManagerInterface):
                 instance.save(notify=False)
         return instance
 
-    def append(self, instance: ResourceBase, vals: dict = {}):
+    def append(self, instance: ResourceBase, vals: dict = {}, *args, **kwargs):
         if self._validate_resource(instance.get_real_instance(), 'append'):
             self._concrete_resource_manager.append(instance.get_real_instance(), vals=vals)
             to_update = vals.copy()
             if instance:
                 if 'user' in to_update:
                     to_update.pop('user')
-                return self.update(instance.uuid, instance.get_real_instance(), vals=to_update)
+                return self.update(instance.uuid, instance.get_real_instance(), vals=to_update, *args, **kwargs)
         return instance
 
-    def replace(self, instance: ResourceBase, vals: dict = {}):
+    def replace(self, instance: ResourceBase, vals: dict = {}, *args, **kwargs):
         if self._validate_resource(instance.get_real_instance(), 'replace'):
             if vals.get('files', None):
                 vals.update(storage_manager.replace(instance.get_real_instance(), vals.get('files')))
@@ -520,7 +520,7 @@ class ResourceManager(ResourceManagerInterface):
             if instance:
                 if 'user' in to_update:
                     to_update.pop('user')
-                return self.update(instance.uuid, instance.get_real_instance(), vals=to_update)
+                return self.update(instance.uuid, instance.get_real_instance(), vals=to_update, *args, **kwargs)
         return instance
 
     def _validate_resource(self, instance: ResourceBase, action_type: str) -> bool:

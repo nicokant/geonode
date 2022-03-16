@@ -17,15 +17,23 @@
 #
 #########################################################################
 import logging
+import shutil
+import tempfile
+from unittest.mock import patch
+from django.conf import settings
+import gisdata
 
 from urllib.parse import urljoin
 
 from django.urls import reverse
 from rest_framework.test import APITestCase
+from django.contrib.auth import get_user_model
 
 from geonode.layers.models import Dataset, Attribute
 from geonode.base.populate_test_data import create_models
 from geonode.maps.models import Map, MapLayer
+from geonode.geoserver.createlayer.utils import create_dataset
+from geonode.geoserver.helpers import gs_catalog
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +50,9 @@ class DatasetsApiTests(APITestCase):
         create_models(b'document')
         create_models(b'map')
         create_models(b'dataset')
+
+    def tearDown(self) -> None:
+        Dataset.objects.filter(name="foo_bar").delete()
 
     def test_datasets(self):
         """
@@ -176,3 +187,84 @@ class DatasetsApiTests(APITestCase):
         self.assertEqual(response.data['dataset']['raw_constraints_other'], "None")
         self.assertEqual(response.data['dataset']['raw_supplemental_information'], "No information provided í £682m")
         self.assertEqual(response.data['dataset']['raw_data_quality_statement'], "OK    1 2   a b")
+
+    @patch('geonode.layers.views.validate_input_source')
+    def test_layer_replace_should_work(self, validate_input_source):
+
+        validate_input_source.return_value = True
+
+        admin = get_user_model().objects.get(username='admin')
+
+        layer = create_dataset(
+            name="foo_bar",
+            title="foo_bar",
+            owner_name=admin.username,
+            geometry_type="Point"
+        )
+
+        prev_count = Dataset.objects.count()
+
+        layer.refresh_from_db()
+        logger.error(layer.alternate)
+
+        prev_keywords = gs_catalog.get_layer(layer.name).resource.keywords
+
+        # ensure that previously are the default one
+        self.assertEqual(['features', 'foo_bar'], prev_keywords)
+
+        # renaming the file in the same way as the lasyer name
+        # the filename must be consiste with the layer name
+        tempdir = tempfile.mkdtemp(dir=settings.STATIC_ROOT)
+
+        shutil.copyfile(f"{gisdata.GOOD_DATA}/vector/single_point.shp", f"{tempdir}/{layer.alternate.split(':')[1]}.shp")
+        shutil.copyfile(f"{gisdata.GOOD_DATA}/vector/single_point.dbf", f"{tempdir}/{layer.alternate.split(':')[1]}.dbf")
+        shutil.copyfile(f"{gisdata.GOOD_DATA}/vector/single_point.prj", f"{tempdir}/{layer.alternate.split(':')[1]}.prj")
+        shutil.copyfile(f"{gisdata.GOOD_DATA}/vector/single_point.shx", f"{tempdir}/{layer.alternate.split(':')[1]}.shx")
+        shutil.copyfile(f"{settings.PROJECT_ROOT}/base/fixtures/test_xml.xml", f"{tempdir}/{layer.alternate.split(':')[1]}.xml")
+
+        old_uuid = layer.uuid
+        # assigning some file to the dataset. All datasets should have the files
+        # the uuid is needed for the assertion during the replace
+        Dataset.objects.filter(name=layer.name).update(
+            files=[
+                f"{tempdir}/{layer.alternate.split(':')[1]}.shp",
+                f"{tempdir}/{layer.alternate.split(':')[1]}.dbf",
+                f"{tempdir}/{layer.alternate.split(':')[1]}.prj",
+                f"{tempdir}/{layer.alternate.split(':')[1]}.shx"
+            ],
+            uuid="7cfbc42c-efa7-431c-8daa-1399dff4cd19")
+
+        payload = {
+            "permissions": '{ "users": {"AnonymousUser": ["view_resourcebase"]} , "groups":{}}',
+            "time": "false",
+            "charset": "UTF-8",
+            "store_spatial_files": False,
+            "base_file_path": f"{tempdir}/{layer.alternate.split(':')[1]}.shp",
+            "dbf_file_path": f"{tempdir}/{layer.alternate.split(':')[1]}.dbf",
+            "prj_file_path": f"{tempdir}/{layer.alternate.split(':')[1]}.prj",
+            "shx_file_path": f"{tempdir}/{layer.alternate.split(':')[1]}.shx",
+            "xml_file_path": f"{tempdir}/{layer.alternate.split(':')[1]}.xml"
+        }
+
+        url = reverse("datasets-replace-dataset", args=(layer.id,))
+
+        self.client.login(username="admin", password="admin")
+
+        response = self.client.post(url, data=payload)
+        self.assertEqual(200, response.status_code)
+
+        layer.refresh_from_db()
+        # evaluate that the abstract is updated and the number of available layer is not changed
+        self.assertEqual(Dataset.objects.count(), prev_count)
+        self.assertEqual('real abstract', layer.abstract)
+
+        # keywords coming from the XML replace the existing one
+        self.assertSetEqual(
+            {'ad', 'foo_bar', 'no conditions to access and use', 'test_dataset', 'features', 'af'},
+            set(gs_catalog.get_layer(layer.name).resource.keywords)
+        )
+
+        if tempdir:
+            shutil.rmtree(tempdir)
+
+        Dataset.objects.filter(alternate=layer.alternate).update(uuid=old_uuid)

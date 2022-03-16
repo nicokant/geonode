@@ -349,18 +349,18 @@ class GeoServerResourceManager(ResourceManagerInterface):
                 import_session.upload_task(_local_files)
                 task = import_session.tasks[0]
                 #  Changing layer name, mode and target
-                task.layer.set_target_layer_name(_name)
                 task.set_update_mode(action_type.upper())
+                task.layer.set_target_layer_name(_name)
                 task.set_target(
                     store_name=_target_store,
                     workspace=_workspace
                 )
                 transforms = session_opts.get('transforms', None)
                 if transforms:
-                    task.set_transforms(transforms)
+                   task.set_transforms(transforms)
                 #  Starting import process
-                import_session.commit()
                 import_session = import_session.reload()
+                import_session.commit()
 
                 try:
                     # Updating Resource with the files replaced
