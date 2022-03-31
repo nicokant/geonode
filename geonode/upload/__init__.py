@@ -32,6 +32,10 @@ class UploadException(Exception):
         return UploadException(*args)
 
 
+class RetriableUploadException(Exception):
+    pass
+
+
 class LayerNotReady(Exception):
     pass
 

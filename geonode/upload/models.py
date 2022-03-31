@@ -22,10 +22,12 @@ import pickle
 import shutil
 import logging
 
+from geonode.upload import RetriableUploadException
 from slugify import slugify
 from gsimporter.api import NotFound
 
 from django.db import models
+from django.db.utils import DatabaseError
 from django.urls import reverse
 from django.conf import settings
 from django.core.files import File
@@ -53,11 +55,15 @@ class UploadManager(models.Manager):
         ).update(state=Upload.STATE_INVALID)
 
     def update_from_session(self, upload_session, layer=None):
-        self.get(
-            user=upload_session.user,
-            name=upload_session.name,
-            import_id=upload_session.import_session.id).update_from_session(
-            upload_session, layer=layer)
+        try:
+            self.get(
+                user=upload_session.user,
+                name=upload_session.name,
+                import_id=upload_session.import_session.id).update_from_session(
+                upload_session, layer=layer)
+        except DatabaseError as e:
+            logger.warning(f'Error in getting upload session: {e}', exc_info=e)
+            raise RetriableUploadException()
 
     def create_from_session(self, user, import_session):
         return self.create(

@@ -54,7 +54,7 @@ from django.views.generic import CreateView, DeleteView
 from django.contrib.auth.decorators import login_required
 
 from geonode.layers.models import Layer
-from geonode.upload import UploadException
+from geonode.upload import UploadException, RetriableUploadException
 from geonode.base.models import Configuration
 from geonode.base.enumerations import CHARSETS
 from geonode.utils import fixup_shp_columnnames
@@ -775,6 +775,9 @@ def view(req, step=None):
             if _success and (_required_input or 'upload/final' in _redirect_to):
                 from geonode.upload.tasks import finalize_incomplete_session_uploads
                 finalize_incomplete_session_uploads.apply_async()
+        return resp
+    except RetriableUploadException:
+        logger.info('Sending fake response')
         return resp
     except BadStatusLine:
         logger.exception('bad status line, geoserver down?')
