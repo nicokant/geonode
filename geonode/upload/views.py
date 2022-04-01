@@ -59,6 +59,7 @@ from geonode.base.models import Configuration
 from geonode.base.enumerations import CHARSETS
 from geonode.utils import fixup_shp_columnnames
 from geonode.decorators import logged_in_or_basicauth
+from django.views.decorators.csrf import csrf_exempt
 
 from geonode.base import register_event
 from geonode.monitoring.models import EventType
@@ -680,8 +681,9 @@ _steps = {
 }
 
 
-@login_required
+@csrf_exempt
 @logged_in_or_basicauth(realm="GeoNode")
+@login_required
 def view(req, step=None):
     """Main uploader view"""
     if not auth.get_user(req).is_authenticated:
