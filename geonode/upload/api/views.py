@@ -97,11 +97,11 @@ class UploadViewSet(DynamicModelViewSet):
                     headers=request.headers
                 )
                 if response.status_code == 500 or response.json().get("status") == 'error':
-                    self._try_again(request, _step, tentative)
+                    tentative = self._try_again(request, _step, tentative)
                 else:
                     break
             except DatabaseError as e:
-                self._try_again(request, _step, tentative, e)
+                tentative = self._try_again(request, _step, tentative, e)
 
         if response.status_code == status.HTTP_200_OK:
             content = response.content
@@ -141,11 +141,12 @@ class UploadViewSet(DynamicModelViewSet):
 
     def _try_again(self, request, _step, tentative, e=None):
         logger.error(f"Database error during upload in step {_step}, tring again", exc_info=e)
-        tentative += 1
         logger.info("Cleaning up the resource, so we can retry again")
 
         if tentative == 3:
             raise ValidationError(detail=f"Number of tentatives reached for step {_step}")
+        tentative += 1
+        return tentative
 
     @extend_schema(methods=['put'],
                    responses={201: None},
@@ -191,7 +192,7 @@ class UploadViewSet(DynamicModelViewSet):
                     request,
                     step
                 )
-            return JsonResponse(
+            return Response(
                 response.json(),
                 status=response.status_code,
                 content_type="application/json"
