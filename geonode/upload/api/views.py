@@ -16,13 +16,11 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 #########################################################################
-import base64
 import json
 from urllib.parse import parse_qsl, urlparse
 from django.http import HttpResponse, JsonResponse
 from dynamic_rest.viewsets import DynamicModelViewSet
 from dynamic_rest.filters import DynamicFilterBackend, DynamicSortingFilter
-from requests.models import HTTPBasicAuth
 
 from drf_spectacular.utils import extend_schema
 
@@ -49,7 +47,6 @@ from .permissions import UploadPermissionsFilter
 from django.conf import settings
 from ..models import Upload, UploadSizeLimit
 
-from rest_framework.exceptions import ValidationError
 import requests
 import logging
 
@@ -100,12 +97,11 @@ class UploadViewSet(DynamicModelViewSet):
                     headers=request.headers
                 )
                 if response.status_code == 500 or response.json().get("status") == 'error':
-                    self._try_again(request, _step, tentative) 
+                    self._try_again(request, _step, tentative)
                 else:
                     break
             except DatabaseError as e:
                 self._try_again(request, _step, tentative, e)
-               
 
         if response.status_code == status.HTTP_200_OK:
             content = response.content
