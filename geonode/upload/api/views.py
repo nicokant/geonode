@@ -19,7 +19,7 @@
 import base64
 import json
 from urllib.parse import parse_qsl, urlparse
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from dynamic_rest.viewsets import DynamicModelViewSet
 from dynamic_rest.filters import DynamicFilterBackend, DynamicSortingFilter
 from requests.models import HTTPBasicAuth
@@ -99,7 +99,7 @@ class UploadViewSet(DynamicModelViewSet):
                     data=request.data,
                     headers=request.headers
                 )
-                if response.status_code == 500:
+                if response.status_code == 500 or response.json().get("status") == 'error':
                     self._try_again(request, _step, tentative) 
                 else:
                     break
@@ -195,11 +195,10 @@ class UploadViewSet(DynamicModelViewSet):
                     request,
                     step
                 )
-            return HttpResponse(
-                response.text,
+            return JsonResponse(
+                response.json(),
                 status=response.status_code,
                 content_type="application/json"
-
             )
 
         # Upload steps defined by geonode.upload.utils._pages
@@ -217,7 +216,7 @@ class UploadViewSet(DynamicModelViewSet):
                     content_type="application/json"
                 )
         # After performing 7 steps if we don't get any final response
-        return HttpResponse(
+        return Response(
             response.text,
             status=response.status_code,
             content_type="application/json"
