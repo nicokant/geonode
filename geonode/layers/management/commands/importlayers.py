@@ -25,7 +25,7 @@ import traceback
 from urllib.parse import urljoin
 from io import BufferedReader, IOBase
 from requests.auth import HTTPBasicAuth
-
+from requests.exceptions import JSONDecodeError
 from django.utils import timezone
 from django.core.management.base import BaseCommand
 
@@ -157,7 +157,7 @@ class GeoNodeUploader:
                             errors.append(file)
                     else:
                         errors.append(file)
-                except requests.exceptions.JSONDecodeError:
+                except JSONDecodeError:
                     traceback.print_exc()
                     errors.append(file)
         return success, errors
