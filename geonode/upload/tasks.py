@@ -60,6 +60,7 @@ def finalize_incomplete_session_uploads(self, *args, **kwargs):
     _upload_ids = []
     _upload_tasks = []
     _upload_ids_expired = []
+    session = None
 
     # Check first if we need to delete stale sessions
     expiry_time = now() - timedelta(hours=UPLOAD_SESSION_EXPIRY_HOURS)
@@ -86,7 +87,6 @@ def finalize_incomplete_session_uploads(self, *args, **kwargs):
 
     # Let's finish the valid ones
     for _upload in Upload.objects.exclude(state__in=[Upload.STATE_PROCESSED, Upload.STATE_INVALID]).exclude(id__in=_upload_ids_expired):
-        session = None
         try:
             if not _upload.import_id:
                 raise NotFound
@@ -190,12 +190,15 @@ def _update_upload_session_state(self, upload_session_id: int):
                     _tasks_ready = any([_task.state in ["READY"] for _task in session.tasks])
                     _tasks_failed = any([_task.state in ["BAD_FORMAT", "ERROR", "CANCELED"] for _task in session.tasks])
                     _tasks_waiting = any([_task.state in ["NO_CRS", "NO_BOUNDS", "NO_FORMAT"] for _task in session.tasks])
-
+                    logger.error(_tasks_ready, _tasks_failed, _tasks_waiting)
                     if _success:
                         if _tasks_failed:
                             # GeoNode Layer creation errored!
                             _upload.set_processing_state(Upload.STATE_INVALID)
-                        elif 'upload/final' not in _redirect_to and 'upload/check' not in _redirect_to and (_tasks_waiting or _tasks_ready):
+                        elif 'upload/final' not in _redirect_to and 'upload/check' not in _redirect_to and _tasks_waiting:
+                            logger.error("errore qua")
+                            logger.error(_redirect_to)
+                            logger.error(_tasks_waiting, _tasks_ready)
                             _upload.set_resume_url(_redirect_to)
                             _upload.set_processing_state(Upload.STATE_WAITING)
                         elif session.state in (Upload.STATE_PENDING, Upload.STATE_RUNNING) and not (_tasks_waiting or _tasks_ready):

@@ -649,7 +649,7 @@ def final_step(upload_session, user, charset="UTF-8", layer_id=None):
                     raise UploadException.from_exc(
                         _("The GeoServer Import Session is no more available"), e)
 
-                upload_session.import_session = import_session
+                upload_session.import_session = import_session.reload()
                 Upload.objects.update_from_session(upload_session)
 
                 # Create the style and assign it to the created resource
