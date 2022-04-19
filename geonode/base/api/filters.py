@@ -16,6 +16,7 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 #########################################################################
+from django.conf import settings
 from geonode.favorite.models import Favorite
 import logging
 from rest_framework.filters import SearchFilter, BaseFilterBackend
@@ -23,6 +24,8 @@ from rest_framework.filters import SearchFilter, BaseFilterBackend
 from geonode.base.bbox_utils import filter_bbox
 from django.db.models import Subquery
 from distutils.util import strtobool
+
+from geonode.security.utils import get_visible_resources
 
 logger = logging.getLogger(__name__)
 
@@ -60,3 +63,18 @@ class FavoriteFilter(BaseFilterBackend):
                 )
             )
         return queryset
+
+
+class FacetVisibleResourceFilter(BaseFilterBackend):
+    """
+    Return Only elements that have a resource assigned.
+    """
+
+    def filter_queryset(self, request, queryset, _):
+        return queryset.filter(
+            id__in=[
+                _facet.id
+                for _facet in queryset
+                if _facet.resourcebase_set.exists()
+            ]
+        )
